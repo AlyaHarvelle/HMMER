@@ -5,7 +5,33 @@ import pandas as pd
 import subprocess
 from Bio.Blast import NCBIXML
 
-def parser(input_file):
+def parse_lines(line):
+    # Add list to be returned
+    rows = list()
+    # Loop through each item in line
+    for key, value in line.items():
+        if key == 'acc':
+            acc = value
+        else:
+            evidence, feature, source = key.split('-')
+            for k, v in value.items():
+                if k == 'regions':
+                    for item in range(len(v)):
+                        reg = v[item]
+                        start, end = reg[0], reg[1]
+                        rows.append({
+                            'acc': acc,
+                            'evidence': evidence,
+                            'feature': feature,
+                            'source': source,
+                            'start': start,
+                            'end': end
+                        })
+
+    # Return parsed rows
+    return rows
+
+def blast_parser(input_file):
     max_query_length = 0
     data = []
     with open(input_file) as f:
@@ -26,23 +52,23 @@ def parser(input_file):
 
                 # Iterate pairwise alignments
                 for hsp in alignment.hsps:
-                    data.append((query_id.split(" ")[0],
-                                    subject_id.split(" ")[0],
-                                    query_length,
-                                    hsp.align_length,
-                                    hsp.query,
-                                    hsp.match,
-                                    hsp.sbjct,
-                                    hsp.query_start,
-                                    hsp.query_end,
-                                    hsp.sbjct_start,
-                                    hsp.sbjct_end,
-                                    hsp.identities,
-                                    hsp.positives,
-                                    hsp.gaps,
-                                    hsp.expect,
-                                    hsp.score,
-                                    ))
+                    data.append((query_id.split("|")[1].split(" ")[0],
+                                 subject_id.split("|")[1].split(" ")[0],
+                                 query_length,
+                                 hsp.align_length,
+                                 hsp.query,
+                                 hsp.match,
+                                 hsp.sbjct,
+                                 hsp.query_start,
+                                 hsp.query_end,
+                                 hsp.sbjct_start,
+                                 hsp.sbjct_end,
+                                 hsp.identities,
+                                 hsp.positives,
+                                 hsp.gaps,
+                                 hsp.expect,
+                                 hsp.score,
+                                ))
 
                     # Skip duplicated subjects
                     break
@@ -58,7 +84,7 @@ def parser(input_file):
         return df
 
 
-def blast_iterator(selected, out_file):
+def blast_iterator(out_file, query_sequence, selected):
     with open(out_file, "w") as fout:
         max_row = len(query_sequence)
         mapped_seq = ["-"] * max_row
@@ -70,9 +96,10 @@ def blast_iterator(selected, out_file):
                     mapped_seq[query_start + c - 1] = l_s if l_s != " " else "-" # assign aa to subject
                     c += 1
             fout.write(">{}\n{}\n".format(row["subject_id"], "".join(mapped_seq)))
+            return fout
 
 
-def calculate(seqs):
+def stats_calculation(seqs):
     data = []
     aa = "ACDEFGHIKLMNPQRSTVWY"
 
