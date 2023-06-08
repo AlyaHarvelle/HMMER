@@ -4,11 +4,15 @@ import numpy as np
 import pandas as pd
 import subprocess
 from Bio.Blast import NCBIXML
+from Bio import AlignIO, SeqIO
 
-def parse_lines(line):
-    # Add list to be returned
+directory = "/Users/alina/HMM/"
+
+def json_parser(line):
+    """
+    Parses .json files and returns a pandas dataframe
+    """
     rows = list()
-    # Loop through each item in line
     for key, value in line.items():
         if key == 'acc':
             acc = value
@@ -28,10 +32,12 @@ def parse_lines(line):
                             'end': end
                         })
 
-    # Return parsed rows
     return rows
 
 def blast_parser(input_file):
+    """
+    Parses BLAST alignment in XML format and returns a pandas dataframe
+    """
     max_query_length = 0
     data = []
     with open(input_file) as f:
@@ -84,22 +90,54 @@ def blast_parser(input_file):
         return df
 
 
-def blast_iterator(out_file, query_sequence, selected):
-    with open(out_file, "w") as fout:
-        max_row = len(query_sequence)
-        mapped_seq = ["-"] * max_row
-        for index, row in selected.iterrows():
-            c = 0
-            query_start = row["query_start"]
-            for l_q, l_s in zip(row['query_seq'], row['subject_seq']):
-                if l_q != " " and l_q != '-': # if the initial aa from query is not empty or gapped
-                    mapped_seq[query_start + c - 1] = l_s if l_s != " " else "-" # assign aa to subject
-                    c += 1
-            fout.write(">{}\n{}\n".format(row["subject_id"], "".join(mapped_seq)))
-            return fout
+# def blast_iterator(out_file, query_sequence, selected):
+#     with open(out_file, "w") as fout:
+#         max_row = len(query_sequence)
+#         mapped_seq = ["-"] * max_row
+#         for index, row in selected.iterrows():
+#             c = 0
+#             query_start = row["query_start"]
+#             for l_q, l_s in zip(row['query_seq'], row['subject_seq']):
+#                 if l_q != " " and l_q != '-': # if the initial aa from query is not empty or gapped
+#                     mapped_seq[query_start + c - 1] = l_s if l_s != " " else "-" # assign aa to subject
+#                     c += 1
+#             fout.write(">{}\n{}\n".format(row["subject_id"], "".join(mapped_seq)))
+#             return fout
 
+# def build_msa_from_blast(path, selected_id, query_sequence, selected_init):
+#     out_file = f'{directory}results/alignments/output_files/blast/{selected_id}_blast.fasta'
+#
+#     with open(out_file, "w") as fout:
+#         mapped_seq = ["-"] * len(query_sequence)
+#
+#         # Write the header line for the query sequence
+#         fout.write(">{}\n".format(selected_id))
+#
+#         # Map the query sequence to the mapped_seq list
+#         c = 0
+#         for l_q in query_sequence:
+#             if l_q != " " and l_q != '-':
+#                 mapped_seq[c] = l_q
+#                 c += 1
+#
+#         # Write the query_mapped_seq sequence to the output file
+#         fout.write("{}\n".format("".join(mapped_seq)))
+#
+#         # Map the subject sequences to the mapped_seq list and write to the output file
+#         for index, row in selected_init.iterrows():
+#             c = 0
+#             query_start = row["query_start"]
+#             for l_q, l_s in zip(row['query_seq'], row['subject_seq']):
+#                 if l_q != " " and l_q != '-':
+#                     mapped_seq[query_start + c - 1] = l_s if l_s != " " else "-"
+#                     c += 1
+#             fout.write(">{}\n{}\n".format(row["subject_id"], "".join(mapped_seq)))
 
 def stats_calculation(seqs):
+    """
+    Returns the values of occupancy and entropy for each alignment
+    :param seqs: alignment in a dataframe
+    """
     data = []
     aa = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -124,6 +162,54 @@ def stats_calculation(seqs):
     return df_calc
 
 def get_fasta(upac): # a function retrieving a FASTA sequence from ID
+    """
+    Returns a sequence for a particular query ID from the remote cluster
+    :param upac: query ID
+    """
     result = subprocess.run(['ssh', 'echidna', '/software/packages/ncbi-blast/latest/bin/blastdbcmd', '-db', '/db/blastdb/uniprot/uniprot.fasta', '-entry', upac], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     return result.stdout
 
+def trim_dis_regions(msa_file, selected_id, start_positions, end_positions):
+    """
+    Returns a FASTA file containing disordered regions only.
+    :param msa_file: an initial FASTA alignment
+    :param selected_id: query ID
+    :param start_positions: the number of column/columns representing the start of the disordered region
+    :param end_positions: the number of column/columns representing the end of the disordered region
+    """
+    records = []
+    for record in SeqIO.parse(msa_file, "fasta"):
+        sequence = record.seq
+        trimmed_sequence = ""
+        previous_end = 0  # Track the end position of the previous region
+        for start, end in zip(start_positions, end_positions):
+            if len(sequence) >= start > previous_end and end <= len(sequence):
+                trimmed_sequence += '-' * (start - previous_end - 1) + sequence[start - 1: end]
+                previous_end = end  # Update the previous end position
+            else:
+                print("Invalid region: start =", start, "end =", end)
+        trimmed_sequence += '-' * (len(sequence) - previous_end)  # Add trailing gaps
+        record.seq = trimmed_sequence
+        records.append(record)
+    SeqIO.write(records, f"{directory}results/disordered/fasta/{selected_id}_disordered.fasta", "fasta")
+
+def get_seqs(aligns, align_type, selected_id):
+    """
+    Takes a FASTA file as input and converts it into a pandas dataframe.
+    Each amino acid in the sequences is split into a separate column,
+    resulting in a dataframe where each column represents an amino acid.
+    :param aligns: input FASTA file
+    :param align_type: a string describing an alignment type ('disordered' or 'whole')
+    :param selected_id: a query ID from a dropdown list
+    """
+    seqs = []
+    if align_type == 'disordered':
+        alignment_file = f"{directory}results/disordered/fasta/{selected_id}_disordered.fasta"
+    else:
+        alignment_file = f'{directory}results/alignments/output_files/{align_type}/{selected_id}_{align_type}.fasta'
+
+    with open(alignment_file) as f:
+        for record in AlignIO.read(f, "fasta"):
+            seqs.append(list(record.seq))  # store sequence as a list of characters
+    seqs = np.array(seqs, dtype="str")
+    return seqs
