@@ -169,16 +169,16 @@ def get_fasta(upac): # a function retrieving a FASTA sequence from ID
     result = subprocess.run(['ssh', 'echidna', '/software/packages/ncbi-blast/latest/bin/blastdbcmd', '-db', '/db/blastdb/uniprot/uniprot.fasta', '-entry', upac], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     return result.stdout
 
-def trim_dis_regions(msa_file, selected_id, start_positions, end_positions):
+def trim_dis_regions(file, query_id, start_positions, end_positions):
     """
     Returns a FASTA file containing disordered regions only.
-    :param msa_file: an initial FASTA alignment
-    :param selected_id: query ID
+    :param file: an initial FASTA alignment
+    :param query_id: query ID
     :param start_positions: the number of column/columns representing the start of the disordered region
     :param end_positions: the number of column/columns representing the end of the disordered region
     """
     records = []
-    for record in SeqIO.parse(msa_file, "fasta"):
+    for record in SeqIO.parse(file, "fasta"):
         sequence = record.seq
         trimmed_sequence = ""
         previous_end = 0  # Track the end position of the previous region
@@ -191,25 +191,66 @@ def trim_dis_regions(msa_file, selected_id, start_positions, end_positions):
         trimmed_sequence += '-' * (len(sequence) - previous_end)  # Add trailing gaps
         record.seq = trimmed_sequence
         records.append(record)
-    SeqIO.write(records, f"{directory}results/disordered/fasta/{selected_id}_disordered.fasta", "fasta")
+    SeqIO.write(records, f"{directory}results/alignments/output_files/disordered/{query_id}_disordered.fasta", "fasta")
 
-def get_seqs(aligns, align_type, selected_id):
+    trimmed_sequences = [record.seq for record in records]  # Collect trimmed sequences
+    return trimmed_sequences
+
+def select_dis_regions(msa_file, query_id, start_positions, end_positions):
+    for i, (start, end) in enumerate(zip(start_positions, end_positions), start=1):
+        records = []
+        for record in SeqIO.parse(msa_file, "fasta"):
+            sequence = record.seq
+            if len(sequence) >= start > 0 and end <= len(sequence):
+                trimmed_sequence = sequence[start - 1: end]
+                record_id = f"{query_id}_dis_{i}"
+                disordered_record = SeqIO.SeqRecord(trimmed_sequence, id=record_id, description="")
+                records.append(disordered_record)
+            else:
+                print(f"Invalid region: start={start}, end={end}")
+
+        if records:
+            SeqIO.write(records, f"{directory}results/alignments/output_files/disordered/separate/{record_id}.fasta", "fasta")
+
+    sep_sequences = [record.seq for record in records]  # Collect trimmed sequences
+    return sep_sequences
+
+def get_seqs(aligns, align_type, query_id):
     """
     Takes a FASTA file as input and converts it into a pandas dataframe.
     Each amino acid in the sequences is split into a separate column,
     resulting in a dataframe where each column represents an amino acid.
     :param aligns: input FASTA file
     :param align_type: a string describing an alignment type ('disordered' or 'whole')
-    :param selected_id: a query ID from a dropdown list
+    :param query_id: a query ID from a dropdown list
     """
     seqs = []
-    if align_type == 'disordered':
-        alignment_file = f"{directory}results/disordered/fasta/{selected_id}_disordered.fasta"
-    else:
-        alignment_file = f'{directory}results/alignments/output_files/{align_type}/{selected_id}_{align_type}.fasta'
+    alignment_file = f'{directory}results/alignments/output_files/{align_type}/{query_id}_{align_type}.fasta'
 
     with open(alignment_file) as f:
         for record in AlignIO.read(f, "fasta"):
             seqs.append(list(record.seq))  # store sequence as a list of characters
     seqs = np.array(seqs, dtype="str")
     return seqs
+
+def process_hmmsearch_file(filename):
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+
+    # Extract the column names
+    column_names = lines[12].split()
+    inclusion_threshold_index = lines.index('  ------ inclusion threshold ------\n')
+
+    # Extract the data rows
+    data_rows = [line.split() for line in lines[14:inclusion_threshold_index]]
+    data_rows = [row[:9] + [' '.join(row[9:])] for row in data_rows]
+
+    # Create the DataFrame
+    stats = pd.DataFrame(data_rows, columns=column_names)
+
+    # Print the total number of hits and unique sequences
+    total_hits = len(stats)
+    unique_sequences = stats.Sequence.nunique()
+    print(f"The total number of Reference Proteome hits: {total_hits}, the number of unique sequences: {unique_sequences}")
+
+    return stats
