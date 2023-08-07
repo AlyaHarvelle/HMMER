@@ -1,12 +1,23 @@
+# Import the libraries
+import os
+import re
+import json
+import ipywidgets as widgets
 from collections import Counter
 import scipy.stats
+from scipy.cluster.hierarchy import linkage, dendrogram
 import numpy as np
 import pandas as pd
 import subprocess
 from Bio.Blast import NCBIXML
 from Bio import AlignIO, SeqIO
+import matplotlib.pyplot as plt
+from matplotlib.pyplot import figure
+import seaborn as sns
+import subprocess
 
-directory = "/Users/alina/HMM/"
+# directory = "/Users/alina/HMM/"
+directory = os.getcwd()
 
 def json_parser(line):
     """
@@ -191,46 +202,62 @@ def trim_dis_regions(file, query_id, start_positions, end_positions):
         trimmed_sequence += '-' * (len(sequence) - previous_end)  # Add trailing gaps
         record.seq = trimmed_sequence
         records.append(record)
-    SeqIO.write(records, f"{directory}results/alignments/output_files/disordered/{query_id}_disordered.fasta", "fasta")
+    SeqIO.write(records, f"{directory}/results/alignments/output_files/disordered/{query_id}_disordered.fasta", "fasta")
 
     trimmed_sequences = [record.seq for record in records]  # Collect trimmed sequences
     return trimmed_sequences
 
-def select_dis_regions(msa_file, query_id, start_positions, end_positions):
+def select_dis_regions(msa_file, query_id, start_positions, end_positions, output_directory):
+    """
+    Saves disordered regions from MSA output in separate FASTA files
+    """
+
+    sep_sequences = []  # Collect trimmed sequences
+
+    with open(msa_file, "r") as msa_handle:
+        msa_records = list(SeqIO.parse(msa_handle, "fasta"))
+
     for i, (start, end) in enumerate(zip(start_positions, end_positions), start=1):
         records = []
-        for record in SeqIO.parse(msa_file, "fasta"):
+        query_record_id = str(query_id)
+        subject_record_ids = []
+
+        for j, record in enumerate(msa_records):
             sequence = record.seq
             if len(sequence) >= start > 0 and end <= len(sequence):
                 trimmed_sequence = sequence[start - 1: end]
-                record_id = f"{query_id}_dis_{i}"
-                disordered_record = SeqIO.SeqRecord(trimmed_sequence, id=record_id, description="")
+
+                if j == 0:
+                    record_id = query_record_id
+                    description = ""
+                else:
+                    if record.id not in subject_record_ids:
+                        subject_record_ids.append(record.id)
+                    record_id = subject_record_ids[-1]
+                    description = record.description
+
+                disordered_record = SeqIO.SeqRecord(trimmed_sequence, id=record_id, description=description)
                 records.append(disordered_record)
             else:
                 print(f"Invalid region: start={start}, end={end}")
 
         if records:
-            SeqIO.write(records, f"{directory}results/alignments/output_files/disordered/separate/{record_id}.fasta", "fasta")
+            output_file_separate = os.path.join(output_directory, f"{query_id}_{i}.fasta")
+            SeqIO.write(records, output_file_separate, "fasta")
 
-    sep_sequences = [record.seq for record in records]  # Collect trimmed sequences
+        sep_sequences.extend([record.seq for record in records])  # Extend the collected sequences
+
     return sep_sequences
 
-def get_seqs(aligns, align_type, query_id):
-    """
-    Takes a FASTA file as input and converts it into a pandas dataframe.
-    Each amino acid in the sequences is split into a separate column,
-    resulting in a dataframe where each column represents an amino acid.
-    :param aligns: input FASTA file
-    :param align_type: a string describing an alignment type ('disordered' or 'whole')
-    :param query_id: a query ID from a dropdown list
-    """
+def get_seqs(aligns):
     seqs = []
-    alignment_file = f'{directory}results/alignments/output_files/{align_type}/{query_id}_{align_type}.fasta'
-
-    with open(alignment_file) as f:
-        for record in AlignIO.read(f, "fasta"):
-            seqs.append(list(record.seq))  # store sequence as a list of characters
-    seqs = np.array(seqs, dtype="str")
+    if isinstance(aligns, str):  # If the input is a file path
+        with open(aligns) as f:
+            for record in AlignIO.read(f, "fasta"):
+                seqs.append(list(record.seq))
+        seqs = np.array(seqs, dtype="str")
+    else:  # If the input is a list of sequences
+        seqs = np.array(aligns, dtype="str")
     return seqs
 
 def process_hmmsearch_file(filename):
@@ -249,8 +276,88 @@ def process_hmmsearch_file(filename):
     stats = pd.DataFrame(data_rows, columns=column_names)
 
     # Print the total number of hits and unique sequences
-    total_hits = len(stats)
     unique_sequences = stats.Sequence.nunique()
-    print(f"The total number of Reference Proteome hits: {total_hits}, the number of unique sequences: {unique_sequences}")
+    print(f"The number of unique sequences: {unique_sequences}")
 
     return stats
+
+def print_dis_seqs(directory, align_type, query_id):
+    all_seqs = []
+
+    for file_name in os.listdir(directory):
+        if f'{query_id}_' in file_name and f'_disordered' not in file_name:
+            alignment_file = os.path.join(directory, file_name)
+            seqs = []
+
+            with open(alignment_file) as f:
+                for record in AlignIO.read(f, "fasta"):
+                    seqs.append(np.array(list(record.seq), dtype="str"))
+
+            all_seqs.append(np.array(seqs))
+
+    if len(all_seqs) == 1:
+        return np.array(all_seqs[0])
+    else:
+        return all_seqs
+
+def read_and_filter_pfam_data(filename, filtered_curated):
+    data = []
+    with open(filename) as file:
+        for line in file:
+            row = line.strip().split("\t")
+            if len(row) >= 6:
+                uniprot_id = row[0]
+                ipr_id = row[1]
+                description = row[2]
+                pfam_id = row[3]
+                start_pos = row[4]
+                end_pos = row[5]
+
+                if pfam_id.startswith("PF"):
+                    data.append([uniprot_id, ipr_id, description, pfam_id, start_pos, end_pos])
+
+    columns = ["uniprot_id", "ipr_id", "description", "pfam_id", "start_pos", "end_pos"]
+    pfam = pd.DataFrame(data, columns=columns)
+    pfam["start_pos"] = pd.to_numeric(pfam["start_pos"])
+    pfam["end_pos"] = pd.to_numeric(pfam["end_pos"])
+    pfam['length'] = pfam['end_pos'] - pfam['start_pos'] + 1
+
+    pfam_filtered = pfam[~pfam.apply(lambda x: any(
+        (x['start_pos'] > curated_region['end']) or (x['end_pos'] < curated_region['start'])
+        for _, curated_region in filtered_curated.iterrows()), axis=1)]
+
+    return pfam_filtered
+
+def calculate_Nf(msa_file, threshold, id_dis):
+    # Read the first line from the original MSA file
+    with open(msa_file, "r") as msa_handle:
+        first_record = next(SeqIO.parse(msa_handle, "fasta"))
+
+    output_file = f"/Users/alina/HMM/results/alignments/input_files/non-redundant/Nf_{id_dis}.fasta"
+    cd_hit_path = "/Users/alina/cd-hit/cd-hit"
+
+    # Run CD-HIT to cluster the sequences (excluding the first line) and remove redundancy
+    cmd = f"{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold}"
+    subprocess.call(cmd, shell=True)
+
+    # Temporarily store the non-redundant sequences in a list
+    non_redundant_sequences = []
+    with open(output_file, "r") as output_handle:
+        for record in SeqIO.parse(output_handle, "fasta"):
+            non_redundant_sequences.append(record)
+
+    # Write the non-redundant sequences (including the first line) to the output file
+    with open(output_file, "w") as final_handle:
+        SeqIO.write([first_record] + non_redundant_sequences, final_handle, "fasta")
+
+    # Count the number of sequences in the MSA and the non-redundant MSA
+    total_sequences = sum(1 for record in SeqIO.parse(msa_file, "fasta"))
+    non_redundant_sequences_count = len(non_redundant_sequences)
+
+    # Calculate the effective sequences (Nf)
+    Nf = non_redundant_sequences_count / total_sequences
+    print("The number of non-redundant sequences:", non_redundant_sequences_count)
+    print("The total number of sequences:", total_sequences)
+    print("Number of effective sequences (Nf):", "{:.2f}".format(Nf))
+
+    return
