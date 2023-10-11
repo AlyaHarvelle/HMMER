@@ -18,10 +18,12 @@ import subprocess
 
 directory = os.getcwd()
 
+# Set input parameters
+name = 'alina'
+server = 'ecate'
+
+# Parses the json file and returns a pandas dataframe
 def json_parser(line):
-    """
-    Parses .json files and returns a pandas dataframe
-    """
     rows = list()
     for key, value in line.items():
         if key == 'acc':
@@ -44,10 +46,8 @@ def json_parser(line):
 
     return rows
 
+# Parses BLAST alignment in XML format and returns a pandas dataframe
 def blast_parser(input_file):
-    """
-    Parses BLAST alignment in XML format and returns a pandas dataframe
-    """
     max_query_length = 0
     data = []
     with open(input_file) as f:
@@ -99,11 +99,9 @@ def blast_parser(input_file):
 
         return df
 
+# Returns the values of occupancy and entropy for each alignment
 def stats_calculation(seqs):
-    """
-    Returns the values of occupancy and entropy for each alignment
-    :param seqs: alignment in a dataframe
-    """
+    
     data = []
     aa = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -127,22 +125,14 @@ def stats_calculation(seqs):
     df_calc = pd.DataFrame(data, columns=['pos', 'occupancy', 'entropy', 'counts'])
     return df_calc
 
-def get_fasta(upac): # a function retrieving a FASTA sequence from ID
-    """
-    Returns a sequence for a particular query ID from the remote cluster
-    :param upac: query ID
-    """
+# Function retrieving a FASTA sequence from ID
+def get_fasta(upac): 
     result = subprocess.run(['ssh', 'ecate', '/software/packages/ncbi-blast/latest/bin/blastdbcmd', '-db', '/db/blastdb/uniprot/uniprot.fasta', '-entry', upac], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     return result.stdout
 
+# Returns a FASTA file containing disordered regions only.
 # def trim_dis_regions(file, query_id, start_positions, end_positions):
-#     """
-#     Returns a FASTA file containing disordered regions only.
-#     :param file: an initial FASTA alignment
-#     :param query_id: query ID
-#     :param start_positions: the number of column/columns representing the start of the disordered region
-#     :param end_positions: the number of column/columns representing the end of the disordered region
-#     """
+# 
 #     records = []
 #     for record in SeqIO.parse(file, "fasta"):
 #         sequence = record.seq
@@ -162,10 +152,8 @@ def get_fasta(upac): # a function retrieving a FASTA sequence from ID
 #     trimmed_sequences = [record.seq for record in records]  # Collect trimmed sequences
 #     return trimmed_sequences
 
+# Saves disordered regions from MSA output in separate FASTA files
 def select_dis_regions(msa_file, query_id, start_positions, end_positions, output_directory):
-    """
-    Saves disordered regions from MSA output in separate FASTA files
-    """
 
     sep_sequences = []  # Collect trimmed sequences
 
@@ -204,6 +192,7 @@ def select_dis_regions(msa_file, query_id, start_positions, end_positions, outpu
 
     return sep_sequences
 
+# Creates a numpy array from the .fasta file
 def get_seqs(aligns):
     seqs = []
     if isinstance(aligns, str):  # If the input is a file path
@@ -215,27 +204,7 @@ def get_seqs(aligns):
         seqs = np.array(aligns, dtype="str")
     return seqs
 
-def process_hmmsearch_file(filename):
-    with open(filename, 'r') as file:
-        lines = file.readlines()
-
-    # Extract the column names
-    column_names = lines[12].split()
-    inclusion_threshold_index = lines.index('  ------ inclusion threshold ------\n')
-
-    # Extract the data rows
-    data_rows = [line.split() for line in lines[14:inclusion_threshold_index]]
-    data_rows = [row[:9] + [' '.join(row[9:])] for row in data_rows]
-
-    # Create the DataFrame
-    stats = pd.DataFrame(data_rows, columns=column_names)
-
-    # Print the total number of hits and unique sequences
-    unique_sequences = stats.Sequence.nunique()
-    print(f"The number of unique sequences: {unique_sequences}")
-
-    return stats
-
+# Prints the sequences of disordered regions of an alignment
 def print_dis_seqs(directory, align_type, query_id):
     all_seqs = []
 
@@ -255,6 +224,7 @@ def print_dis_seqs(directory, align_type, query_id):
     else:
         return all_seqs
 
+# Processes the output of the protein2ipr results with Pfam instances
 def read_and_filter_pfam_data(filename, filtered_curated):
     data = []
     with open(filename) as file:
@@ -267,7 +237,8 @@ def read_and_filter_pfam_data(filename, filtered_curated):
                 pfam_id = row[3]
                 start_pos = row[4]
                 end_pos = row[5]
-
+                
+                # Choose a Pfam ID
                 if pfam_id.startswith("PF"):
                     data.append([uniprot_id, ipr_id, description, pfam_id, start_pos, end_pos])
 
@@ -279,6 +250,7 @@ def read_and_filter_pfam_data(filename, filtered_curated):
 
     return pfam
 
+# Calculate redundancy 
 def calculate_Nf(msa_file, threshold, id_dis):
 
     output_file = f"/Users/alina/HMM/results/alignments/input_files/non-redundant/Nf_{id_dis}.fasta"
@@ -300,7 +272,6 @@ def calculate_Nf(msa_file, threshold, id_dis):
 
     # Write the non-redundant sequences to the output file
     with open(output_file, "w") as final_handle:
-        # SeqIO.write([first_record] + non_redundant_sequences, final_handle, "fasta")
         SeqIO.write([first_record] + non_redundant_sequences, final_handle, "fasta")
 
     # Count the number of sequences in the MSA and the non-redundant MSA
@@ -315,6 +286,7 @@ def calculate_Nf(msa_file, threshold, id_dis):
 
     return
 
+# Function to plot occupancy and entropy
 def plot_disordered_regions(id, l_cl, l_nr, dis_calc_num):
     # Define the data frame names
     dis_calc_name = f"dis_calc{dis_calc_num}"
@@ -354,7 +326,30 @@ def plot_disordered_regions(id, l_cl, l_nr, dis_calc_num):
     plt.suptitle(f'KDE plot, histogram, and scatterplot of occupancy and entropy distribution for {id}_{dis_calc_num+1} protein')
     plt.tight_layout()
     plt.show()
+    
+# Extract the table information from the hmmsearch output
+def process_hmmsearch_file(filename):
+    with open(filename, 'r') as file:
+        lines = file.readlines()
 
+    # Extract the column names
+    column_names = lines[12].split()
+    inclusion_threshold_index = lines.index('  ------ inclusion threshold ------\n')
+
+    # Extract the data rows
+    data_rows = [line.split() for line in lines[14:inclusion_threshold_index]]
+    data_rows = [row[:9] + [' '.join(row[9:])] for row in data_rows]
+
+    # Create the DataFrame
+    stats = pd.DataFrame(data_rows, columns=column_names)
+
+    # Print the total number of hits and unique sequences
+    unique_sequences = stats.Sequence.nunique()
+    print(f"The number of unique sequences: {unique_sequences}")
+
+    return stats
+
+# Extract the information regarding hmm and alignment regions
 def extract_table_from_output(hmm_result_file):
     with open(hmm_result_file, 'r') as f:
         lines = f.readlines()
@@ -386,7 +381,8 @@ def extract_table_from_output(hmm_result_file):
         # Create and return the DataFrame
         result_df = pd.DataFrame(result_data, columns=['id', 'hmm_from', 'hmm_to', 'ali_from', 'ali_to', 'env_from', 'env_to'])
         return result_df
-    
+
+# Plot overlapping proteins between Pfam and Disprot regions 
 def plot_overlapping_proteins(pfam_overlap, curated_query, id, i):
     unique_uniprot_ids = pfam_overlap['uniprot_id'].unique()
 
