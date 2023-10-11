@@ -16,7 +16,6 @@ from matplotlib.pyplot import figure
 import seaborn as sns
 import subprocess
 
-# directory = "/Users/alina/HMM/"
 directory = os.getcwd()
 
 def json_parser(line):
@@ -100,50 +99,6 @@ def blast_parser(input_file):
 
         return df
 
-
-# def blast_iterator(out_file, query_sequence, selected):
-#     with open(out_file, "w") as fout:
-#         max_row = len(query_sequence)
-#         mapped_seq = ["-"] * max_row
-#         for index, row in selected.iterrows():
-#             c = 0
-#             query_start = row["query_start"]
-#             for l_q, l_s in zip(row['query_seq'], row['subject_seq']):
-#                 if l_q != " " and l_q != '-': # if the initial aa from query is not empty or gapped
-#                     mapped_seq[query_start + c - 1] = l_s if l_s != " " else "-" # assign aa to subject
-#                     c += 1
-#             fout.write(">{}\n{}\n".format(row["subject_id"], "".join(mapped_seq)))
-#             return fout
-
-# def build_msa_from_blast(path, selected_id, query_sequence, selected_init):
-#     out_file = f'{directory}results/alignments/output_files/blast/{selected_id}_blast.fasta'
-#
-#     with open(out_file, "w") as fout:
-#         mapped_seq = ["-"] * len(query_sequence)
-#
-#         # Write the header line for the query sequence
-#         fout.write(">{}\n".format(selected_id))
-#
-#         # Map the query sequence to the mapped_seq list
-#         c = 0
-#         for l_q in query_sequence:
-#             if l_q != " " and l_q != '-':
-#                 mapped_seq[c] = l_q
-#                 c += 1
-#
-#         # Write the query_mapped_seq sequence to the output file
-#         fout.write("{}\n".format("".join(mapped_seq)))
-#
-#         # Map the subject sequences to the mapped_seq list and write to the output file
-#         for index, row in selected_init.iterrows():
-#             c = 0
-#             query_start = row["query_start"]
-#             for l_q, l_s in zip(row['query_seq'], row['subject_seq']):
-#                 if l_q != " " and l_q != '-':
-#                     mapped_seq[query_start + c - 1] = l_s if l_s != " " else "-"
-#                     c += 1
-#             fout.write(">{}\n{}\n".format(row["subject_id"], "".join(mapped_seq)))
-
 def stats_calculation(seqs):
     """
     Returns the values of occupancy and entropy for each alignment
@@ -177,35 +132,35 @@ def get_fasta(upac): # a function retrieving a FASTA sequence from ID
     Returns a sequence for a particular query ID from the remote cluster
     :param upac: query ID
     """
-    result = subprocess.run(['ssh', 'echidna', '/software/packages/ncbi-blast/latest/bin/blastdbcmd', '-db', '/db/blastdb/uniprot/uniprot.fasta', '-entry', upac], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    result = subprocess.run(['ssh', 'ecate', '/software/packages/ncbi-blast/latest/bin/blastdbcmd', '-db', '/db/blastdb/uniprot/uniprot.fasta', '-entry', upac], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     return result.stdout
 
-def trim_dis_regions(file, query_id, start_positions, end_positions):
-    """
-    Returns a FASTA file containing disordered regions only.
-    :param file: an initial FASTA alignment
-    :param query_id: query ID
-    :param start_positions: the number of column/columns representing the start of the disordered region
-    :param end_positions: the number of column/columns representing the end of the disordered region
-    """
-    records = []
-    for record in SeqIO.parse(file, "fasta"):
-        sequence = record.seq
-        trimmed_sequence = ""
-        previous_end = 0  # Track the end position of the previous region
-        for start, end in zip(start_positions, end_positions):
-            if len(sequence) >= start > previous_end and end <= len(sequence):
-                trimmed_sequence += '-' * (start - previous_end - 1) + sequence[start - 1: end]
-                previous_end = end  # Update the previous end position
-            else:
-                print("Invalid region: start =", start, "end =", end)
-        trimmed_sequence += '-' * (len(sequence) - previous_end)  # Add trailing gaps
-        record.seq = trimmed_sequence
-        records.append(record)
-    SeqIO.write(records, f"{directory}/results/alignments/output_files/disordered/{query_id}_disordered.fasta", "fasta")
+# def trim_dis_regions(file, query_id, start_positions, end_positions):
+#     """
+#     Returns a FASTA file containing disordered regions only.
+#     :param file: an initial FASTA alignment
+#     :param query_id: query ID
+#     :param start_positions: the number of column/columns representing the start of the disordered region
+#     :param end_positions: the number of column/columns representing the end of the disordered region
+#     """
+#     records = []
+#     for record in SeqIO.parse(file, "fasta"):
+#         sequence = record.seq
+#         trimmed_sequence = ""
+#         previous_end = 0  # Track the end position of the previous region
+#         for start, end in zip(start_positions, end_positions):
+#             if len(sequence) >= start > previous_end and end <= len(sequence):
+#                 trimmed_sequence += '-' * (start - previous_end - 1) + sequence[start - 1: end]
+#                 previous_end = end  # Update the previous end position
+#             else:
+#                 print("Invalid region: start =", start, "end =", end)
+#         trimmed_sequence += '-' * (len(sequence) - previous_end)  # Add trailing gaps
+#         record.seq = trimmed_sequence
+#         records.append(record)
+#     SeqIO.write(records, f"{directory}/results/alignments/output_files/disordered/{query_id}_disordered.fasta", "fasta")
 
-    trimmed_sequences = [record.seq for record in records]  # Collect trimmed sequences
-    return trimmed_sequences
+#     trimmed_sequences = [record.seq for record in records]  # Collect trimmed sequences
+#     return trimmed_sequences
 
 def select_dis_regions(msa_file, query_id, start_positions, end_positions, output_directory):
     """
@@ -322,23 +277,20 @@ def read_and_filter_pfam_data(filename, filtered_curated):
     pfam["end_pos"] = pd.to_numeric(pfam["end_pos"])
     pfam['length'] = pfam['end_pos'] - pfam['start_pos'] + 1
 
-    pfam_filtered = pfam[~pfam.apply(lambda x: any(
-        (x['start_pos'] > curated_region['end']) or (x['end_pos'] < curated_region['start'])
-        for _, curated_region in filtered_curated.iterrows()), axis=1)]
-
-    return pfam_filtered
+    return pfam
 
 def calculate_Nf(msa_file, threshold, id_dis):
-    # Read the first line from the original MSA file
-    with open(msa_file, "r") as msa_handle:
-        first_record = next(SeqIO.parse(msa_handle, "fasta"))
 
     output_file = f"/Users/alina/HMM/results/alignments/input_files/non-redundant/Nf_{id_dis}.fasta"
     cd_hit_path = "/Users/alina/cd-hit/cd-hit"
 
     # Run CD-HIT to cluster the sequences (excluding the first line) and remove redundancy
-    cmd = f"{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold}"
+    cmd = f"{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold} -n 4 > /dev/null"
     subprocess.call(cmd, shell=True)
+
+    # Read the first line from the original MSA file
+    with open(msa_file, "r") as msa_handle:
+        first_record = next(SeqIO.parse(msa_handle, "fasta"))
 
     # Temporarily store the non-redundant sequences in a list
     non_redundant_sequences = []
@@ -346,8 +298,9 @@ def calculate_Nf(msa_file, threshold, id_dis):
         for record in SeqIO.parse(output_handle, "fasta"):
             non_redundant_sequences.append(record)
 
-    # Write the non-redundant sequences (including the first line) to the output file
+    # Write the non-redundant sequences to the output file
     with open(output_file, "w") as final_handle:
+        # SeqIO.write([first_record] + non_redundant_sequences, final_handle, "fasta")
         SeqIO.write([first_record] + non_redundant_sequences, final_handle, "fasta")
 
     # Count the number of sequences in the MSA and the non-redundant MSA
@@ -358,6 +311,116 @@ def calculate_Nf(msa_file, threshold, id_dis):
     Nf = non_redundant_sequences_count / total_sequences
     print("The number of non-redundant sequences:", non_redundant_sequences_count)
     print("The total number of sequences:", total_sequences)
-    print("Number of effective sequences (Nf):", "{:.2f}".format(Nf))
+    print("The ratio of non-redundant sequences (Nf):", "{:.2f}".format(Nf))
 
     return
+
+def plot_disordered_regions(id, l_cl, l_nr, dis_calc_num):
+    # Define the data frame names
+    dis_calc_name = f"dis_calc{dis_calc_num}"
+    dis_calc_nr_name = f"dis_calc_nr{dis_calc_num}"
+
+    # Define the figure and axes
+    fig, ax = plt.subplots(3, 2, figsize=(10, 10))
+
+    # KDE plot of occupancy/entropy of disordered region
+    sns.kdeplot(eval(dis_calc_name)['occupancy'], shade=True, ax=ax[0, 0], warn_singular=False)
+    sns.kdeplot(eval(dis_calc_nr_name)['occupancy'], shade=True, ax=ax[0, 0], warn_singular=False)
+    sns.kdeplot(eval(dis_calc_name)['entropy'], shade=True, ax=ax[0, 1], warn_singular=False)
+    sns.kdeplot(eval(dis_calc_nr_name)['entropy'], shade=True, ax=ax[0, 1], warn_singular=False)
+
+    # Histogram of occupancy/entropy redundant vs non-redundant
+    ax[1, 0].hist([eval(dis_calc_name)['occupancy'], eval(dis_calc_nr_name)['occupancy']])
+    ax[1, 1].hist([eval(dis_calc_name)['entropy'], eval(dis_calc_nr_name)['entropy']])
+
+    # Scatterplot of occupancy/entropy redundant vs non-redundant
+    ax[2, 0].scatter(np.sort(eval(dis_calc_name)['occupancy']), eval(dis_calc_name)['pos'])
+    ax[2, 0].scatter(np.sort(eval(dis_calc_nr_name)['occupancy']), eval(dis_calc_nr_name)['pos'])
+
+    ax[2, 1].scatter(np.sort(eval(dis_calc_name)['entropy']), eval(dis_calc_name)['pos'][::-1])
+    ax[2, 1].scatter(np.sort(eval(dis_calc_nr_name)['entropy']), eval(dis_calc_nr_name)['pos'][::-1])
+
+    # Add x-axis labels
+    x_axis_labels = ['Occupancy', 'Entropy']
+    for i in range(3):
+        for j in range(2):
+            ax[i, j].set_xlabel(x_axis_labels[j])
+
+    # Add the legend
+    legend_labels = [f'Initial MSA ({l_cl} sequences)', f'Non-redundant MSA ({l_nr} sequences)']
+    for ax in ax.flat:
+        ax.legend(legend_labels)
+
+    plt.suptitle(f'KDE plot, histogram, and scatterplot of occupancy and entropy distribution for {id}_{dis_calc_num+1} protein')
+    plt.tight_layout()
+    plt.show()
+
+def extract_table_from_output(hmm_result_file):
+    with open(hmm_result_file, 'r') as f:
+        lines = f.readlines()
+
+        # Extract a query ID
+        query_id = None
+        extract_info = False
+        result_data = []
+
+        for line in lines:
+            if line.startswith(">>"):
+                query_id = line.strip()[2:].split(" ")[1]
+                extract_info = True  # Set the flag to True when query ID is found
+            elif extract_info:
+                line_data = line.split()
+                if line_data[0].isdigit():
+                    try:
+                        hmm_from = int(line_data[6])
+                        hmm_to = int(line_data[7])
+                        ali_from = int(line_data[9])
+                        ali_to = int(line_data[10])
+                        env_from = int(line_data[12])
+                        env_to = int(line_data[13])
+                        result_data.append([query_id, hmm_from, hmm_to, ali_from, ali_to, env_from, env_to])
+                    except ValueError:
+                        pass
+                    extract_info = False
+
+        # Create and return the DataFrame
+        result_df = pd.DataFrame(result_data, columns=['id', 'hmm_from', 'hmm_to', 'ali_from', 'ali_to', 'env_from', 'env_to'])
+        return result_df
+    
+def plot_overlapping_proteins(pfam_overlap, curated_query, id, i):
+    unique_uniprot_ids = pfam_overlap['uniprot_id'].unique()
+
+    if len(unique_uniprot_ids) == 0:
+        print("No overlapping regions to plot.")
+        return
+
+    # Plot overlapping regions
+    fig, ax = plt.subplots(figsize=(10, 0.25 * len(unique_uniprot_ids)))
+
+    # Plot the regions
+    ax.hlines(pfam_overlap['uniprot_id'], pfam_overlap['start_pos'], pfam_overlap['end_pos'], linewidth=10, color='blue', label='Pfam Region')
+    ax.hlines(pfam_overlap['uniprot_id'], curated_query['start'], curated_query['end'], linewidth=10, color='green', label='Disprot Region')
+
+    ax.set_yticks(pfam_overlap['uniprot_id'])
+    ax.set_yticklabels(pfam_overlap['uniprot_id'])
+
+    # Create a custom range for the y-axis based on the unique 'uniprot_id' values
+    y_axis_range = range(len(unique_uniprot_ids))
+    ax.set_ylim(min(y_axis_range) - 1, max(y_axis_range) + 1)
+
+    ax.axvspan(curated_query['start'].iloc[0], curated_query['end'].iloc[0], facecolor='yellow', alpha=0.5)
+
+    plt.title(f'Overlaps between the {i} disordered region of the {id} protein with the other proteins')
+    plt.xlabel('Position')
+    plt.ylabel('UniProt ID')
+    plt.legend(loc='upper left')
+    plt.grid(True)
+    plt.show()
+
+# def filter_pfam_data(id, i):
+#     pfam_overlap_filtered = pfam_overlap[~pfam_overlap.apply(lambda x: any(
+#         (x['start_pos'] > curated_region['end']) or (x['end_pos'] < curated_region['start'])
+#         for _, curated_region in curated_query.iterrows()), axis=1)]
+#     if len(pfam_overlap_filtered) == 0:
+#         print(f"No intersections with the {id}_{i} region found")
+#     return pfam_overlap_filtered
