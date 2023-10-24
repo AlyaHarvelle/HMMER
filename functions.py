@@ -345,7 +345,7 @@ def process_hmmsearch_file(filename):
 
     # Print the total number of hits and unique sequences
     unique_sequences = stats.Sequence.nunique()
-    print(f"The number of unique sequences: {unique_sequences}")
+#     print(f"The number of unique sequences: {unique_sequences}")
 
     return stats
 
@@ -365,26 +365,24 @@ def extract_table_from_output(hmm_result_file):
                 extract_info = True  # Set the flag to True when query ID is found
             elif extract_info:
                 line_data = line.split()
-                if line_data[0].isdigit():
+                if len(line_data) >= 2 and line_data[1] == "!":
                     try:
                         hmm_from = int(line_data[6])
                         hmm_to = int(line_data[7])
-                        ali_from = int(line_data[9])
-                        ali_to = int(line_data[10])
-                        env_from = int(line_data[12])
-                        env_to = int(line_data[13])
-                        result_data.append([query_id, hmm_from, hmm_to, ali_from, ali_to, env_from, env_to])
+                        hmm_length = (hmm_to - hmm_from + 1)
+                        result_data.append([query_id, hmm_from, hmm_to, hmm_length])
                     except ValueError:
                         pass
                     extract_info = False
 
         # Create and return the DataFrame
-        result_df = pd.DataFrame(result_data, columns=['id', 'hmm_from', 'hmm_to', 'ali_from', 'ali_to', 'env_from', 'env_to'])
+        result_df = pd.DataFrame(result_data, columns=['id', 'hmm_from', 'hmm_to', 'hmm_length'])
         return result_df
 
-# Plot overlapping proteins between Pfam and Disprot regions 
-def plot_overlapping_proteins(pfam_overlap, curated_query, id, i):
-    unique_uniprot_ids = pfam_overlap['uniprot_id'].unique()
+
+# Plot overlaps between HMM and alignment regions
+def plot_overlaps(hmm_results, curated_query, id_dis):
+    unique_uniprot_ids = hmm_results['Sequence'].unique()
 
     if len(unique_uniprot_ids) == 0:
         print("No overlapping regions to plot.")
@@ -393,30 +391,26 @@ def plot_overlapping_proteins(pfam_overlap, curated_query, id, i):
     # Plot overlapping regions
     fig, ax = plt.subplots(figsize=(10, 0.25 * len(unique_uniprot_ids)))
 
-    # Plot the regions
-    ax.hlines(pfam_overlap['uniprot_id'], pfam_overlap['start_pos'], pfam_overlap['end_pos'], linewidth=10, color='blue', label='Pfam Region')
-    ax.hlines(pfam_overlap['uniprot_id'], curated_query['start'], curated_query['end'], linewidth=10, color='green', label='Disprot Region')
+    # Plot the regions using 'hmm_from' and 'hmm_to' for Pfam, and 'ali_from' and 'ali_to' for Disprot
+    ax.hlines(hmm_results['Sequence'], hmm_results['hmm_from'], hmm_results['hmm_to'], linewidth=10, color='blue', label='HMM region', linestyle='-')
+    ax.hlines(hmm_results['Sequence'], hmm_results['ali_from'], hmm_results['ali_to'], linewidth=10, color='green', label='Alignment region', linestyle='-')
+#     ax.hlines(hmm_results['Sequence'], hmm_results['env_from'], hmm_results['env_to'], linewidth=10, color='pink', label='Envelope region', linestyle='-')
 
-    ax.set_yticks(pfam_overlap['uniprot_id'])
-    ax.set_yticklabels(pfam_overlap['uniprot_id'])
+    ax.set_yticks(hmm_results['Sequence'])
+    ax.set_yticklabels(hmm_results['Sequence'])
 
     # Create a custom range for the y-axis based on the unique 'uniprot_id' values
     y_axis_range = range(len(unique_uniprot_ids))
     ax.set_ylim(min(y_axis_range) - 1, max(y_axis_range) + 1)
+    
+    # Add annotations at specific positions
+    for idx, row in hmm_results.iterrows():
+        x_pos = (row['hmm_from'] + row['hmm_to']) / 2  # Calculate the x position for annotation using 'hmm' coordinates
+        y_pos = row['Sequence']  # Use the 'uniprot_id' as the y position
 
-    ax.axvspan(curated_query['start'].iloc[0], curated_query['end'].iloc[0], facecolor='yellow', alpha=0.5)
-
-    plt.title(f'Overlaps between the {i} disordered region of the {id} protein with the other proteins')
+    plt.title(f'Overlaps between the HMM and alignment regions of the {id_dis} protein')
     plt.xlabel('Position')
     plt.ylabel('UniProt ID')
-    plt.legend(loc='upper left')
+    plt.legend(loc='upper right')
     plt.grid(True)
     plt.show()
-
-# def filter_pfam_data(id, i):
-#     pfam_overlap_filtered = pfam_overlap[~pfam_overlap.apply(lambda x: any(
-#         (x['start_pos'] > curated_region['end']) or (x['end_pos'] < curated_region['start'])
-#         for _, curated_region in curated_query.iterrows()), axis=1)]
-#     if len(pfam_overlap_filtered) == 0:
-#         print(f"No intersections with the {id}_{i} region found")
-#     return pfam_overlap_filtered
