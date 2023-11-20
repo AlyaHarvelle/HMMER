@@ -11,6 +11,11 @@ import pandas as pd
 import subprocess
 from Bio.Blast import NCBIXML
 from Bio import AlignIO, SeqIO
+from Bio.AlignIO import ClustalIO
+from Bio.Seq import Seq
+from Bio.Align.Applications import ClustalOmegaCommandline
+from Bio.Align import MultipleSeqAlignment
+from Bio.SeqRecord import SeqRecord
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import figure
 import seaborn as sns
@@ -99,11 +104,12 @@ def blast_parser(input_file):
 
         return df
 
+# Calculate the statistics
 # Returns the values of occupancy and entropy for each alignment
-def stats_calculation(seqs):
+def stats_calculation(seqs, q_id):
     
     data = []
-    aa = "ACDEFGHIKLMNPQRSTVWY"
+    aa = 'ACDEFGHIKLMNPQRSTVWY'
 
     for i, column in enumerate(seqs.T):
 
@@ -114,51 +120,110 @@ def stats_calculation(seqs):
             pass
         count_sorted = sorted(count.items(), key=lambda x:x[1], reverse=True)
 
-        non_gap = np.count_nonzero(column != "-")
+        non_gap = np.count_nonzero(column != '-')
         occupancy = non_gap / column.size
 
         probabilities = [count.get(k, 0.0) / column.size for k in aa]
 
         entropy = scipy.stats.entropy(probabilities, base=20)
-        data.append([i, occupancy, entropy, count_sorted])
+        data.append([i, q_id, occupancy, entropy, count_sorted])
 
-    df_calc = pd.DataFrame(data, columns=['pos', 'occupancy', 'entropy', 'counts'])
+    df_calc = pd.DataFrame(data, columns=['pos', 'query_id', 'occupancy', 'entropy', 'counts'])
     return df_calc
+
+# Calculate statistics of the MSAs - returns a list of dataframes for each MSA
+def process_files(folder_path, method):
+    statistics_list = []
+    
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.fasta'):
+            protein_id = os.path.splitext(filename)[0].split('_')[0]
+            seq_data = print_dis_seqs(folder_path, method, protein_id)
+            stats = stats_calculation(seq_data, protein_id)
+            statistics_list.append(stats)
+            
+    statistics_df = pd.concat(statistics_list, ignore_index=True)
+            
+    return statistics_df
 
 # Function retrieving a FASTA sequence from ID
 def get_fasta(upac): 
     result = subprocess.run(['ssh', 'ecate', '/software/packages/ncbi-blast/latest/bin/blastdbcmd', '-db', '/db/blastdb/uniprot/uniprot.fasta', '-entry', upac], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     return result.stdout
 
-# Returns a FASTA file containing disordered regions only.
-# def trim_dis_regions(file, query_id, start_positions, end_positions):
-# 
-#     records = []
-#     for record in SeqIO.parse(file, "fasta"):
-#         sequence = record.seq
-#         trimmed_sequence = ""
-#         previous_end = 0  # Track the end position of the previous region
-#         for start, end in zip(start_positions, end_positions):
-#             if len(sequence) >= start > previous_end and end <= len(sequence):
-#                 trimmed_sequence += '-' * (start - previous_end - 1) + sequence[start - 1: end]
-#                 previous_end = end  # Update the previous end position
-#             else:
-#                 print("Invalid region: start =", start, "end =", end)
-#         trimmed_sequence += '-' * (len(sequence) - previous_end)  # Add trailing gaps
-#         record.seq = trimmed_sequence
-#         records.append(record)
-#     SeqIO.write(records, f"{directory}/results/alignments/output_files/disordered/{query_id}_disordered.fasta", "fasta")
+# ClustalOmega MSA generator
+def clustalo_generator(input_folder, output_folder):
+    # Iterate over all input files in the input folder
+    for input_file in os.listdir(input_folder):
+        if input_file.endswith('.fasta'):
+            # Extract ID from the file name
+            id_split = os.path.splitext(input_file)[0].split('_')[0]
+            print(f'MSA ClustalOmega is generated for the {id_split} protein')
+            output_file = os.path.join(output_folder, f'{id_split}_clustal.fasta') # name of the output file
 
-#     trimmed_sequences = [record.seq for record in records]  # Collect trimmed sequences
-#     return trimmed_sequences
+            # Define the ClustalOmega command
+            clustalomega_cline = ClustalOmegaCommandline(
+                infile=os.path.join(input_folder, input_file),
+                outfile=output_file,
+                outputorder='input-order',
+                verbose=False,
+                auto=True,
+                force=True)
+
+            # Run the ClustalOmega command
+            subprocess.run(str(clustalomega_cline), shell=True)
+            
+# Remove gaps from the query sequence of the alignment
+def remove_extra_gaps(alignment):
+    # Get the first sequence
+    first_seq = alignment[0].seq
+
+    # Find the positions of non-gap characters in the first sequence
+    non_gap_positions = [i for i, base in enumerate(first_seq) if base != '-']
+
+    # Create a list to hold SeqRecord objects for the filtered alignment
+    filtered_seqs = []
+
+    for seq_record in alignment:
+        # Extract and join the non-gap characters
+        filtered_seq = Seq(''.join(seq_record.seq[i] for i in non_gap_positions), seq_record.seq.alphabet)
+        
+        # Create a new SeqRecord with the filtered sequence
+        filtered_record = SeqRecord(
+            seq=filtered_seq,
+            id=seq_record.id,
+            description=seq_record.description)
+        
+        filtered_seqs.append(filtered_record)
+
+    # Create a new alignment with filtered SeqRecord objects
+    new_alignment = MultipleSeqAlignment(filtered_seqs, alphabet=alignment._alphabet)
+
+    return new_alignment
+
+# Apply gaps removing to all files
+def process_folder(input_folder):
+    # Iterate over all input files in the input folder
+    for input_file in os.listdir(input_folder):
+        if input_file.endswith('.fasta'):
+            # Set file paths
+            file_path = os.path.join(input_folder, input_file)
+
+            # Read the alignment and remove extra gaps
+            alignment = AlignIO.read(file_path, 'fasta')
+            filtered_alignment = remove_extra_gaps(alignment)
+
+            # Write the filtered alignment to a new file
+            with open(file_path, "w") as output_handle:
+                AlignIO.write(filtered_alignment, output_handle, 'fasta')
+
 
 # Saves disordered regions from MSA output in separate FASTA files
-def select_dis_regions(msa_file, query_id, start_positions, end_positions, output_directory):
+def select_dis_regions(msa_file, query_id, start_positions, end_positions, region, output_file):
+    sep_sequences = []
 
-    sep_sequences = []  # Collect trimmed sequences
-
-    with open(msa_file, "r") as msa_handle:
-        msa_records = list(SeqIO.parse(msa_handle, "fasta"))
+    with open(msa_file, 'r') as msa_handle:
+        msa_records = list(SeqIO.parse(msa_handle, 'fasta'))
 
     for i, (start, end) in enumerate(zip(start_positions, end_positions), start=1):
         records = []
@@ -167,12 +232,14 @@ def select_dis_regions(msa_file, query_id, start_positions, end_positions, outpu
 
         for j, record in enumerate(msa_records):
             sequence = record.seq
-            if len(sequence) >= start > 0 and end <= len(sequence):
-                trimmed_sequence = sequence[start - 1: end]
+            seq_length = len(sequence)
+            if seq_length >= start > 0 and end <= seq_length:
+                trimmed_sequence = sequence[start - 1: end - 1]  # Adjust the slicing here
+#                 print(f'Region: {region}, Start: {start}, End: {end}, Seq Length: {seq_length}')
 
                 if j == 0:
                     record_id = query_record_id
-                    description = ""
+                    description = ''
                 else:
                     if record.id not in subject_record_ids:
                         subject_record_ids.append(record.id)
@@ -182,11 +249,10 @@ def select_dis_regions(msa_file, query_id, start_positions, end_positions, outpu
                 disordered_record = SeqIO.SeqRecord(trimmed_sequence, id=record_id, description=description)
                 records.append(disordered_record)
             else:
-                print(f"Invalid region: start={start}, end={end}")
+                print(f'Invalid region: start={start}, end={end}, Seq Length: {seq_length}')
 
         if records:
-            output_file_separate = os.path.join(output_directory, f"{query_id}_{i}.fasta")
-            SeqIO.write(records, output_file_separate, "fasta")
+            SeqIO.write(records, output_file, 'fasta')
 
         sep_sequences.extend([record.seq for record in records])  # Extend the collected sequences
 
@@ -197,11 +263,11 @@ def get_seqs(aligns):
     seqs = []
     if isinstance(aligns, str):  # If the input is a file path
         with open(aligns) as f:
-            for record in AlignIO.read(f, "fasta"):
+            for record in AlignIO.read(f, 'fasta'):
                 seqs.append(list(record.seq))
-        seqs = np.array(seqs, dtype="str")
+        seqs = np.array(seqs, dtype='str')
     else:  # If the input is a list of sequences
-        seqs = np.array(aligns, dtype="str")
+        seqs = np.array(aligns, dtype='str')
     return seqs
 
 # Prints the sequences of disordered regions of an alignment
@@ -214,8 +280,8 @@ def print_dis_seqs(directory, align_type, query_id):
             seqs = []
 
             with open(alignment_file) as f:
-                for record in AlignIO.read(f, "fasta"):
-                    seqs.append(np.array(list(record.seq), dtype="str"))
+                for record in AlignIO.read(f, 'fasta'):
+                    seqs.append(np.array(list(record.seq), dtype='str'))
 
             all_seqs.append(np.array(seqs))
 
@@ -224,66 +290,114 @@ def print_dis_seqs(directory, align_type, query_id):
     else:
         return all_seqs
 
-# Processes the output of the protein2ipr results with Pfam instances
-def read_and_filter_pfam_data(filename, filtered_curated):
+# # Processes the output of the protein2ipr results with Pfam instances - old
+# def read_and_filter_pfam_data(filename, filtered_curated):
+#     data = []
+#     with open(filename) as file:
+#         for line in file:
+#             row = line.strip().split("\t")
+#             if len(row) >= 6:
+#                 uniprot_id = row[0]
+#                 ipr_id = row[1]
+#                 description = row[2]
+#                 pfam_id = row[3]
+#                 start_pfam = row[4]
+#                 end_pfam = row[5]
+                
+#                 # Choose a Pfam ID
+#                 if pfam_id.startswith("PF"):
+#                     data.append([uniprot_id, ipr_id, description, pfam_id, start_pfam, end_pfam])
+
+#     columns = ["uniprot_id", "ipr_id", "description", "pfam_id", "start_pfam", "end_pfam"]
+#     pfam = pd.DataFrame(data, columns=columns)
+#     pfam["start_pfam"] = pd.to_numeric(pfam["start_pfam"])
+#     pfam["end_pfam"] = pd.to_numeric(pfam["end_pfam"])
+#     pfam["length_pfam"] = pfam["end_pfam"] - pfam["start_pfam"] + 1
+
+#     return pfam
+
+# Function to plot occupancy and entropy distribution for each MSA
+def plot_occupancy_entropy_distribution(stats, num_rows=4):
+    unique_query_ids = stats['query_id'].unique()
+
+    # Calculate the number of subplots in each row
+    num_plots_in_row = np.ceil(len(unique_query_ids) / num_rows).astype(int)
+
+    # Create subplots for each unique query_id
+    fig, axes = plt.subplots(num_rows, num_plots_in_row, figsize=(20, 8))
+
+    for i, query_id in enumerate(unique_query_ids):
+        subset = stats[stats['query_id'] == query_id]
+        row_index = i // num_plots_in_row  # Determine the row for the current instance
+        col_index = i % num_plots_in_row   # Determine the column for the current instance
+
+        sns.kdeplot(subset['occupancy'], shade=True, ax=axes[row_index, col_index], label='Occupancy', warn_singular=False)
+        sns.kdeplot(subset['entropy'], shade=True, ax=axes[row_index, col_index], label='Entropy', warn_singular=False)
+
+        axes[row_index, col_index].set_ylabel('')
+        axes[row_index, col_index].set_xlabel('')
+
+        axes[row_index, col_index].set_title(f'ID: {query_id}')
+
+    fig.legend(loc='upper left', labels=['Occupancy', 'Entropy'])
+
+    plt.suptitle('Occupancy and entropy distribution for each Uniprot ID')
+    plt.tight_layout()
+    plt.show()
+
+# Preprocess the Intepro outputs
+def pfam_processing(filename):
     data = []
     with open(filename) as file:
         for line in file:
             row = line.strip().split("\t")
-            if len(row) >= 6:
-                uniprot_id = row[0]
-                ipr_id = row[1]
-                description = row[2]
-                pfam_id = row[3]
-                start_pos = row[4]
-                end_pos = row[5]
+            uniprot_id = row[0]
+            pfam_id = row[1]
+            ipr_id = row[2]
+            start_pfam = row[3]
+            end_pfam = row[4]
                 
-                # Choose a Pfam ID
-                if pfam_id.startswith("PF"):
-                    data.append([uniprot_id, ipr_id, description, pfam_id, start_pos, end_pos])
+            # Choose a Pfam ID
+            if pfam_id.startswith("PF"):
+                data.append([uniprot_id, pfam_id, ipr_id, start_pfam, end_pfam])
 
-    columns = ["uniprot_id", "ipr_id", "description", "pfam_id", "start_pos", "end_pos"]
+    columns = ["uniprot_id", "pfam_id", "ipr_id", "start_pfam", "end_pfam"]
     pfam = pd.DataFrame(data, columns=columns)
-    pfam["start_pos"] = pd.to_numeric(pfam["start_pos"])
-    pfam["end_pos"] = pd.to_numeric(pfam["end_pos"])
-    pfam['length'] = pfam['end_pos'] - pfam['start_pos'] + 1
+    pfam["start_pfam"] = pd.to_numeric(pfam["start_pfam"])
+    pfam["end_pfam"] = pd.to_numeric(pfam["end_pfam"])
+    pfam["length_pfam"] = pfam["end_pfam"] - pfam["start_pfam"] + 1
 
     return pfam
 
 # Calculate redundancy 
-def calculate_Nf(msa_file, threshold, id_dis):
+def calculate_red(msa_file, output_file, threshold, word_size, id_split):
 
-    output_file = f"/Users/alina/HMM/results/alignments/input_files/non-redundant/Nf_{id_dis}.fasta"
-    cd_hit_path = "/Users/alina/cd-hit/cd-hit"
+    cd_hit_path = '/Users/alina/cd-hit/cd-hit'
 
-    # Run CD-HIT to cluster the sequences (excluding the first line) and remove redundancy
-    cmd = f"{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold} -n 4 > /dev/null"
+    # Run CD-Hit to cluster the sequences and remove redundancy
+    cmd = f'{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold} -n {word_size} > /dev/null'
     subprocess.call(cmd, shell=True)
 
-    # Read the first line from the original MSA file
-    with open(msa_file, "r") as msa_handle:
-        first_record = next(SeqIO.parse(msa_handle, "fasta"))
-
-    # Temporarily store the non-redundant sequences in a list
+    # Store the non-redundant sequences in a list
     non_redundant_sequences = []
-    with open(output_file, "r") as output_handle:
-        for record in SeqIO.parse(output_handle, "fasta"):
+    with open(output_file, 'r') as output_handle:
+        for record in SeqIO.parse(output_handle, 'fasta'):
             non_redundant_sequences.append(record)
 
-    # Write the non-redundant sequences to the output file
-    with open(output_file, "w") as final_handle:
-        SeqIO.write([first_record] + non_redundant_sequences, final_handle, "fasta")
+    # Write the sequences to the output file
+    with open(output_file, 'w') as final_handle:
+        SeqIO.write(non_redundant_sequences, final_handle, 'fasta')
 
-    # Count the number of sequences in the MSA and the non-redundant MSA
-    total_sequences = sum(1 for record in SeqIO.parse(msa_file, "fasta"))
+    # Count the number of sequences in the original MSA and the non-redundant MSA
+    total_sequences = sum(1 for record in SeqIO.parse(msa_file, 'fasta'))
     non_redundant_sequences_count = len(non_redundant_sequences)
 
-    # Calculate the effective sequences (Nf)
+    # Count the effective sequences (Nf)
     Nf = non_redundant_sequences_count / total_sequences
-    print("The number of non-redundant sequences:", non_redundant_sequences_count)
-    print("The total number of sequences:", total_sequences)
-    print("The ratio of non-redundant sequences (Nf):", "{:.2f}".format(Nf))
-
+    print(f'Non-redundant seqs for {id_split}:', non_redundant_sequences_count, 
+          'Total no. of seqs:', total_sequences,
+          'Ratio:', '{:.2f}'.format(Nf))
+    
     return
 
 # Function to plot occupancy and entropy
@@ -345,7 +459,6 @@ def process_hmmsearch_file(filename):
 
     # Print the total number of hits and unique sequences
     unique_sequences = stats.Sequence.nunique()
-#     print(f"The number of unique sequences: {unique_sequences}")
 
     return stats
 
@@ -367,16 +480,16 @@ def extract_table_from_output(hmm_result_file):
                 line_data = line.split()
                 if len(line_data) >= 2 and line_data[1] == "!":
                     try:
-                        hmm_from = int(line_data[6])
-                        hmm_to = int(line_data[7])
-                        hmm_length = (hmm_to - hmm_from + 1)
-                        result_data.append([query_id, hmm_from, hmm_to, hmm_length])
+                        ali_from = int(line_data[9])
+                        ali_to = int(line_data[10])
+                        ali_length = (ali_to - ali_from + 1)                        
+                        result_data.append([query_id, ali_from, ali_to, ali_length])
                     except ValueError:
                         pass
                     extract_info = False
 
         # Create and return the DataFrame
-        result_df = pd.DataFrame(result_data, columns=['id', 'hmm_from', 'hmm_to', 'hmm_length'])
+        result_df = pd.DataFrame(result_data, columns=['id', 'ali_from', 'ali_to', 'ali_length'])
         return result_df
 
 
@@ -394,7 +507,6 @@ def plot_overlaps(hmm_results, curated_query, id_dis):
     # Plot the regions using 'hmm_from' and 'hmm_to' for Pfam, and 'ali_from' and 'ali_to' for Disprot
     ax.hlines(hmm_results['Sequence'], hmm_results['hmm_from'], hmm_results['hmm_to'], linewidth=10, color='blue', label='HMM region', linestyle='-')
     ax.hlines(hmm_results['Sequence'], hmm_results['ali_from'], hmm_results['ali_to'], linewidth=10, color='green', label='Alignment region', linestyle='-')
-#     ax.hlines(hmm_results['Sequence'], hmm_results['env_from'], hmm_results['env_to'], linewidth=10, color='pink', label='Envelope region', linestyle='-')
 
     ax.set_yticks(hmm_results['Sequence'])
     ax.set_yticklabels(hmm_results['Sequence'])
@@ -414,3 +526,28 @@ def plot_overlaps(hmm_results, curated_query, id_dis):
     plt.legend(loc='upper right')
     plt.grid(True)
     plt.show()
+    
+# Calculate the overlaps percentage
+def calculate_overlap(row_pfam, row_disprot):
+    start_pfam = row_pfam['start_pfam']
+    end_pfam = row_pfam['end_pfam']
+    start_hmm = row_pfam['ali_from']
+    end_hmm = row_pfam['ali_to']
+    start_disprot = row_disprot['start'] 
+    end_disprot = row_disprot['end']
+    disprot_length = end_disprot - start_disprot + 1
+
+    overlap_pfam_disprot = min(end_pfam, end_disprot) - max(start_pfam, start_disprot) + 1
+    overlap_hmm_disprot = min(end_hmm, end_disprot) - max(start_hmm, start_disprot) + 1
+
+    if overlap_pfam_disprot > 0:
+        percentage_overlap_pfam = (overlap_pfam_disprot / disprot_length) * 100
+    else:
+        percentage_overlap_pfam = 0
+    
+    if overlap_hmm_disprot > 0:
+        percentage_overlap_hmm = (overlap_hmm_disprot / disprot_length) * 100
+    else:
+        percentage_overlap_hmm = 0
+
+    return percentage_overlap_pfam, percentage_overlap_hmm, overlap_pfam_disprot, overlap_hmm_disprot
