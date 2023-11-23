@@ -12,4 +12,6 @@ This repository contains the following files:
 To prepare the files for the following analysis, one needs to start with the `msa_preprocessing.ipynb`, then `hmm_preprocessing.ipynb`. 
 The corresponding analysis is conducted in `msa_analysis.ipynb` and `hmm_analysis.ipynb`.
 
+1. `msa_preprocessing.ipynb`: We need to upload all files in the folder `databases-uniprot`, then run all the cells.
+
 
