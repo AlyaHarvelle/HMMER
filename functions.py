@@ -73,20 +73,16 @@ def blast_parser(input_file):
 
                 # Iterate pairwise alignments
                 for hsp in alignment.hsps:
-                    data.append((query_id.split("|")[1].split(" ")[0],
-                                 subject_id.split("|")[1].split(" ")[0],
+                    data.append((query_id.split('|')[1].split(' ')[0],
+                                 subject_id.split('|')[1].split(' ')[0],
                                  query_length,
                                  hsp.align_length,
                                  hsp.query,
-                                 hsp.match,
                                  hsp.sbjct,
                                  hsp.query_start,
                                  hsp.query_end,
                                  hsp.sbjct_start,
                                  hsp.sbjct_end,
-                                 hsp.identities,
-                                 hsp.positives,
-                                 hsp.gaps,
                                  hsp.expect,
                                  hsp.score,
                                 ))
@@ -94,10 +90,11 @@ def blast_parser(input_file):
                     # Skip duplicated subjects
                     break
 
-        df = pd.DataFrame(data, columns=["query_id", "subject_id", "query_len", "hsp_len", "query_seq",
-                                               "match_seq", "subject_seq", "query_start", "query_end",
-                                               "subject_start", "subject_end", "identity", "positive",
-                                               "gaps", "eval", "bit_score"])
+        df = pd.DataFrame(data, columns=['query_id', 'subject_id', 'query_len', 'hsp_len', 
+                                         'query_seq','subject_seq', 'query_start', 'query_end',
+                                         'subject_start', 'subject_end',
+                                         'eval', 'bit_score'])
+        
         df = df.sort_values('eval', ascending=True)
         grouped = df.groupby('query_id')['subject_id'].nunique().reset_index(name='count')
         df = pd.merge(df, grouped, on='query_id')
@@ -234,8 +231,7 @@ def select_dis_regions(msa_file, query_id, start_positions, end_positions, regio
             sequence = record.seq
             seq_length = len(sequence)
             if seq_length >= start > 0 and end <= seq_length:
-                trimmed_sequence = sequence[start - 1: end - 1]  # Adjust the slicing here
-#                 print(f'Region: {region}, Start: {start}, End: {end}, Seq Length: {seq_length}')
+                trimmed_sequence = sequence[start - 1: end]  # Adjust the slicing here
 
                 if j == 0:
                     record_id = query_record_id
@@ -290,35 +286,9 @@ def print_dis_seqs(directory, align_type, query_id):
     else:
         return all_seqs
 
-# # Processes the output of the protein2ipr results with Pfam instances - old
-# def read_and_filter_pfam_data(filename, filtered_curated):
-#     data = []
-#     with open(filename) as file:
-#         for line in file:
-#             row = line.strip().split("\t")
-#             if len(row) >= 6:
-#                 uniprot_id = row[0]
-#                 ipr_id = row[1]
-#                 description = row[2]
-#                 pfam_id = row[3]
-#                 start_pfam = row[4]
-#                 end_pfam = row[5]
-                
-#                 # Choose a Pfam ID
-#                 if pfam_id.startswith("PF"):
-#                     data.append([uniprot_id, ipr_id, description, pfam_id, start_pfam, end_pfam])
-
-#     columns = ["uniprot_id", "ipr_id", "description", "pfam_id", "start_pfam", "end_pfam"]
-#     pfam = pd.DataFrame(data, columns=columns)
-#     pfam["start_pfam"] = pd.to_numeric(pfam["start_pfam"])
-#     pfam["end_pfam"] = pd.to_numeric(pfam["end_pfam"])
-#     pfam["length_pfam"] = pfam["end_pfam"] - pfam["start_pfam"] + 1
-
-#     return pfam
-
 # Function to plot occupancy and entropy distribution for each MSA
 def plot_occupancy_entropy_distribution(stats, num_rows=4):
-    unique_query_ids = stats['query_id'].unique()
+    unique_query_ids = np.sort(stats['query_id'].unique())
 
     # Calculate the number of subplots in each row
     num_plots_in_row = np.ceil(len(unique_query_ids) / num_rows).astype(int)
@@ -337,7 +307,7 @@ def plot_occupancy_entropy_distribution(stats, num_rows=4):
         axes[row_index, col_index].set_ylabel('')
         axes[row_index, col_index].set_xlabel('')
 
-        axes[row_index, col_index].set_title(f'ID: {query_id}')
+        axes[row_index, col_index].set_title('ID: {}'.format(query_id))
 
     fig.legend(loc='upper left', labels=['Occupancy', 'Entropy'])
 
@@ -480,18 +450,27 @@ def extract_table_from_output(hmm_result_file):
                 line_data = line.split()
                 if len(line_data) >= 2 and line_data[1] == "!":
                     try:
+                        hmm_from = int(line_data[6])
+                        hmm_to = int(line_data[7])
+                        hmm_length = (hmm_to - hmm_from + 1)
                         ali_from = int(line_data[9])
                         ali_to = int(line_data[10])
-                        ali_length = (ali_to - ali_from + 1)                        
-                        result_data.append([query_id, ali_from, ali_to, ali_length])
+                        ali_length = (ali_to - ali_from + 1)
+                        env_from = int(line_data[12])
+                        env_to = int(line_data[13])
+                        env_length = (env_to - env_from + 1)
+                        result_data.append([query_id, hmm_from, hmm_to, hmm_length,
+                                            ali_from, ali_to, ali_length, 
+                                            env_from, env_to, env_length])
                     except ValueError:
                         pass
                     extract_info = False
 
         # Create and return the DataFrame
-        result_df = pd.DataFrame(result_data, columns=['id', 'ali_from', 'ali_to', 'ali_length'])
+        result_df = pd.DataFrame(result_data, columns=['id', 'hmm_from', 'hmm_to', 'hmm_length',
+                                                       'ali_from', 'ali_to', 'ali_length',
+                                                       'env_from', 'env_to', 'env_length'])
         return result_df
-
 
 # Plot overlaps between HMM and alignment regions
 def plot_overlaps(hmm_results, curated_query, id_dis):
