@@ -27,6 +27,14 @@ directory = os.getcwd()
 name = 'alina'
 server = 'ecate'
 
+# Create a directory if it doesn't exist yet
+def create_directory(directory_path):
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+        print('Directory {} created.'.format(directory_path))
+    else:
+        print('Directory {} already exists.'.format(directory_path))
+
 # Parses the json file and returns a pandas dataframe
 def json_parser(line):
     rows = list()
