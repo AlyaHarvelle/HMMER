@@ -538,3 +538,25 @@ def calculate_overlap(row_pfam, row_disprot):
         percentage_overlap_hmm = 0
 
     return percentage_overlap_pfam, percentage_overlap_hmm, overlap_pfam_disprot, overlap_hmm_disprot
+
+# Function to calculate overlaps between DisProt-HMM and Pfam-HMM
+def pfam_hmm_overlap(row_pfam):
+    # Calculate the overlap of hmm (ali in this case) and the Pfam
+    overlap_len = min(row_pfam['end_pfam'], row_pfam['ali_to']) - max(row_pfam['start_pfam'], 
+                                                                      row_pfam['ali_from']) + 1 
+    overlap_pfam = overlap_len / row_pfam['length_pfam'] * 100 # % of length overlap with Pfam
+    overlap_ali = overlap_len / row_pfam['ali_length'] * 100 # % of length overlap with HMM (ali)
+    total_length = row_pfam['length_pfam'] + row_pfam['ali_length'] - overlap_len # the whole region covered by hmm and pfam
+    non_overlap_len = total_length - overlap_len + 1 # non covered region
+
+    if overlap_len > 0:
+        overlap_perc = (overlap_len / total_length) * 100 
+        overlap_sym = (2 * overlap_len / (row_pfam['ali_length'] + row_pfam['length_pfam'])) * 100
+    else:
+        overlap_len = 0
+        overlap_pfam = 0
+        overlap_ali = 0
+        overlap_perc = 0
+        overlap_sym = 0
+
+    return overlap_len, overlap_pfam, overlap_ali, non_overlap_len, overlap_perc, overlap_sym
