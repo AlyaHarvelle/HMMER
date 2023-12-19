@@ -2,6 +2,7 @@
 import os
 import re
 import json
+import shutil
 import ipywidgets as widgets
 from collections import Counter
 import scipy.stats
@@ -136,8 +137,8 @@ def stats_calculation(seqs, q_id):
     df_calc = pd.DataFrame(data, columns=['pos', 'query_id', 'occupancy', 'entropy', 'counts'])
     return df_calc
 
-# Calculate statistics of the MSAs - returns a list of dataframes for each MSA
-def process_files(folder_path, method):
+# Calculate statistics of the MSAs
+def calculate_statistics(folder_path, method):
     statistics_list = []
     
     for filename in os.listdir(folder_path):
@@ -323,6 +324,49 @@ def plot_occupancy_entropy_distribution(stats, num_rows=4):
     plt.tight_layout()
     plt.show()
 
+# Plot dendrograms for MSA
+def plot_dendrograms(clstr_path, ali):
+    for cluster_filename in os.listdir(clstr_path):
+        if cluster_filename.endswith('.clstr'):
+            cluster_path = os.path.join(clstr_path, cluster_filename)
+
+            cluster_data = []
+            with open(cluster_path, 'r') as file:
+                for line in file:
+                    if line.startswith('>Cluster'):
+                        continue
+                    parts = line.strip().split('\t')
+                    percentage_matches = re.findall(r'\d+\.\d+', parts[-1])
+                    if percentage_matches:
+                        percentage = float(percentage_matches[0])
+                        cluster_data.append(percentage)
+
+            # Check if there are at least two observations
+            if len(cluster_data) < 2:
+                continue
+
+            # Convert the data into a matrix
+            matrix_data = np.array(cluster_data).reshape(len(cluster_data), 1)
+
+            # Create linkage matrix using the data and hierarchical clustering
+            Z = linkage(matrix_data, method='average')
+
+            prot = cluster_path.split('_')[1].split('/')[3]
+
+            # Plot the dendrogram
+            plt.figure(figsize=(10, 6))
+            dendrogram(Z, labels=np.arange(len(cluster_data)), leaf_rotation=90, leaf_font_size=8)
+
+            # Add a horizontal line for the threshold
+            threshold = 5.0
+            plt.axhline(y=threshold, color='red', linestyle='--', label='Threshold ({}%)'.format(threshold))
+
+            plt.title('Hierarchical Clustering Dendrogram - {}'.format(ali))
+            plt.xlabel('Dendrogram of the {} MSA'.format(prot))
+            plt.ylabel('Distance')
+            plt.show()
+#             break    
+    
 # Preprocess the Intepro outputs
 def pfam_processing(filename):
     data = []
@@ -348,13 +392,19 @@ def pfam_processing(filename):
     return pfam
 
 # Calculate redundancy 
-def calculate_red(msa_file, output_file, threshold, word_size, id_split):
+def calculate_red(msa_file, output_file, threshold, word_size, id_split, clusters_path):
 
     cd_hit_path = '/Users/alina/cd-hit/cd-hit'
 
+    # Specify the full path for the .clstr file
+    clstr_file = os.path.join(clusters_path, f'{os.path.basename(output_file)}.clstr')
+
     # Run CD-Hit to cluster the sequences and remove redundancy
-    cmd = f'{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold} -n {word_size} > /dev/null'
+    cmd = f'{cd_hit_path} -i {msa_file} -o {output_file} -c {threshold} -n {word_size} -bak -clustal -d 0 > /dev/null'
     subprocess.call(cmd, shell=True)
+
+    # Move the .clstr file to the specified clusters folder
+    shutil.move(f'{output_file}.clstr', clstr_file)
 
     # Store the non-redundant sequences in a list
     non_redundant_sequences = []
