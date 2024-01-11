@@ -46,7 +46,7 @@ We open the folder **proj**. All scripts are run there.
     - `preprocessed/`: Processed hmmsearch output in CSV format.
       - `hmmsearch_clustal_df_*_**.csv`: CSV file for a specific Uniprot ID and region.
       - ...
-    - `combined/`: Merged files from the **preprocessed** folder.
+    - `combined/`: Merged files from the `preprocessed` folder.
       - `combined_hmmsearch_results.csv`: Merged CSV file.
   - `pfam/`
     - `protein2ipr_clustal.tsv`: hmmsearch instances found in InterPro.
