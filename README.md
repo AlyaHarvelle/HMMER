@@ -46,15 +46,15 @@ We open the folder `proj`. All scripts are run from the directory `proj/scripts`
       - `hmmsearch_clustal_(Uniprot_ID_1)_(region).txt`
       - `hmmsearch_clustal_(Uniprot_ID_2)_(region).txt`
       - ...
-    - `preprocessed/`: Processed hmmsearch output in CSV format.
-      - `hmmsearch_clustal_df_(Uniprot_ID_1)_(region).csv`
-      - `hmmsearch_clustal_df_(Uniprot_ID_2)_(region).csv`
-      - ...
-    - `combined/`: Merged files from the `preprocessed` folder.
-      - `combined_hmmsearch_results.csv`
-  - `pfam/`
-    - `protein2ipr_clustal.tsv`: hmmsearch instances found in InterPro.
-    - `pfam_disprot.csv`: Merged hmmsearch and InterPro results.
+         - `preprocessed/`: Processed hmmsearch output in CSV format.
+            - `hmmsearch_clustal_df_(Uniprot_ID_1)_(region).csv`
+            - `hmmsearch_clustal_df_(Uniprot_ID_2)_(region).csv`
+            - ...
+         - `combined/`: Merged files from the `preprocessed` folder.
+            - `combined_hmmsearch_results.csv`
+    - `pfam/`
+      - `protein2ipr_clustal.tsv`: hmmsearch instances found in InterPro.
+      - `pfam_disprot.csv`: Merged hmmsearch and InterPro results.
   - `scripts/`
     - `blast_parser.py`: Converts XML files to data frames.
     - `df_filter.sh`: Selects rows from `curated_disprot.csv`.
