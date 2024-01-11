@@ -70,15 +70,15 @@ We open the folder `proj`. All scripts are run from the directory `proj/scripts`
 
 We run the scripts one by one in the directory `root/scripts`.
 
-1 `python blast_parser.py`
-2 `bash df_filter.sh ../databases/curated_disprot.csv ../databases/uniprot_filtered`
-3 `python split_csv.py ../databases/uniprot_filtered/ ../databases/uniprot_filtered/parts/`
-4 `sbatch start_array_jobs_msa.sh ../databases/uniprot_filtered/parts ../msa/unali_seq/` - TO FIX
-5 `python clustalo_generator.py ../msa/unali_seq ../msa/clustal_msa`
-6 `python cut_msa.py`
-7 `python hmmbuild.py`
-8 `sbatch start_array_jobs_hmm.sh clustal`
-9 `python hmmsearch_prep.py`
-10 `./protein2ipr.py ../hmm/hmmsearch/combined/ ../databases/filtered.tsv.gz ../hmm/pfam/protein2ipr_clustal.tsv` - search only in domains
-11 `python pfam_hmm_merge.py`
+- `python blast_parser.py`
+- `bash df_filter.sh ../databases/curated_disprot.csv ../databases/uniprot_filtered`
+- `python split_csv.py ../databases/uniprot_filtered/ ../databases/uniprot_filtered/parts/`
+- `sbatch start_array_jobs_msa.sh ../databases/uniprot_filtered/parts ../msa/unali_seq/` - TO FIX
+- `python clustalo_generator.py ../msa/unali_seq ../msa/clustal_msa`
+- `python cut_msa.py`
+- `python hmmbuild.py`
+- `sbatch start_array_jobs_hmm.sh clustal`
+- `python hmmsearch_prep.py`
+- `./protein2ipr.py ../hmm/hmmsearch/combined/ ../databases/filtered.tsv.gz ../hmm/pfam/protein2ipr_clustal.tsv` - search only in domains
+- `python pfam_hmm_merge.py`
 
