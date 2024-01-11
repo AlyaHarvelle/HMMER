@@ -4,50 +4,54 @@ Author: Skrylnik Alina.
 
 This repository contains the following files: 
 
-- `msa_preprocessing.ipynb`, `hmm_preprocessing.ipynb`: extract the files to work with in `msa_analysis` and `hmm_analysis` notebooks.
 - `msa_analysis.ipynb`: analysis of the multiple sequence alignments.
 - `hmm_analysis.ipynb`: analysis of the generated Hidden Markov Models.
 - `functions.py`: contains the functions used in the previously listed notebooks.
 
-To prepare the files for the following analysis, one needs to start with the `msa_preprocessing.ipynb`, then `hmm_preprocessing.ipynb`. 
-The corresponding analysis is conducted in `msa_analysis.ipynb` and `hmm_analysis.ipynb`.
-
 ## Data acquisition and processing
 
-# Project Structure
-
-We open the folder **proj**. All scripts are run there.
+We open the folder `proj`. All scripts are run from the directory `proj/scripts`.
 
 - `proj/`
   - `databases/`
-    - `curated_disprot.csv`: Uniprot IDs, start and end positions of the disordered regions.
-    - `filtered.tsv.gz`: Extract from protein2ipr db, containing only domains.
-    - `uniprot_filtered/`: Curated Uniprot instances containing the disordered regions.
-      - `curated_uniprot_disprot_0.csv`: Data frame for Uniprot instances with disordered regions.
-      - `curated_uniprot_disprot_1.csv`: ...
+    - `curated_disprot.csv`: A data frame containing information about Uniprot IDs, start and end positions of the disordered regions.
+    - `filtered.tsv.gz`: An extract from protein2ipr database, containing only Pfam domains.
+    - `uniprot_filtered/`: Curated Uniprot instances containing the disordered regions data frames.
+      - `curated_uniprot_disprot_0.csv`
+      - `curated_uniprot_disprot_1.csv`
       - ...
+      - `parts/`: Data frames of Uniprot instances split for each query ID.
+         - `curated_uniprot_disprot_(Uniprot_ID_1).csv`
+         - `curated_uniprot_disprot_(Uniprot_ID_2).csv`
+         - ...
   - `msa/`
     - `unali_seqs/`: Unaligned sequences, serving as input for MSA build.
-      - `*_input.fasta`: Unaligned sequences file for a specific Uniprot ID.
+      - `(Uniprot_ID_1)_input.fasta`
+      - `(Uniprot_ID_2)_input.fasta`
       - ...
     - `clustal_msa/`: ClustalOmega MSA results.
-      - `*_clustal.fasta`: ClustalOmega MSA file for a specific Uniprot ID.
+      - `(Uniprot_ID_1)_clustal.fasta`
+      - `(Uniprot_ID_2)_clustal.fasta`
       - ...
-    - `disordered/`: Trimmed MSA, containing only disordered regions.
-      - `*_*.fasta`: Trimmed MSA file for a specific Uniprot ID and region.
-      - ...
+      - `disordered/`: Trimmed MSA, containing only disordered regions.
+         - `(Uniprot_ID_1)_(region).fasta`
+         - `(Uniprot_ID_2)_(region).fasta`
+         - ...
   - `hmm/`
     - `hmmbuild/`: Hidden Markov Models.
-      - `*.hmm`: HMM file for a specific Uniprot ID.
+      - `(Uniprot_ID_1)_(region).hmm`
+      - `(Uniprot_ID_2)_(region).hmm`
       - ...
     - `hmmsearch/`: HMM search results against RP75%, in text format.
-      - `hmmsearch_clustal_*_**.txt`: HMM search result file for a specific Uniprot ID and region.
+      - `hmmsearch_clustal_(Uniprot_ID_1)_(region).txt`
+      - `hmmsearch_clustal_(Uniprot_ID_2)_(region).txt`
       - ...
     - `preprocessed/`: Processed hmmsearch output in CSV format.
-      - `hmmsearch_clustal_df_*_**.csv`: CSV file for a specific Uniprot ID and region.
+      - `hmmsearch_clustal_df_(Uniprot_ID_1)_(region).csv`
+      - `hmmsearch_clustal_df_(Uniprot_ID_2)_(region).csv`
       - ...
     - `combined/`: Merged files from the `preprocessed` folder.
-      - `combined_hmmsearch_results.csv`: Merged CSV file.
+      - `combined_hmmsearch_results.csv`
   - `pfam/`
     - `protein2ipr_clustal.tsv`: hmmsearch instances found in InterPro.
     - `pfam_disprot.csv`: Merged hmmsearch and InterPro results.
