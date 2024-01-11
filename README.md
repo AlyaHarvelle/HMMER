@@ -73,12 +73,12 @@ We run the scripts one by one in the directory `root/scripts`.
 - `python blast_parser.py`
 - `bash df_filter.sh ../databases/curated_disprot.csv ../databases/uniprot_filtered`
 - `python split_csv.py ../databases/uniprot_filtered/ ../databases/uniprot_filtered/parts/`
-- `sbatch start_array_jobs_msa.sh ../databases/uniprot_filtered/parts ../msa/unali_seq/` - TO FIX
+- `sbatch start_array_jobs_msa.sh ../databases/uniprot_filtered/parts ../msa/unali_seq/`
 - `python clustalo_generator.py ../msa/unali_seq ../msa/clustal_msa`
 - `python cut_msa.py`
 - `python hmmbuild.py`
 - `sbatch start_array_jobs_hmm.sh clustal`
 - `python hmmsearch_prep.py`
-- `./protein2ipr.py ../hmm/hmmsearch/combined/ ../databases/filtered.tsv.gz ../hmm/pfam/protein2ipr_clustal.tsv` - search only in domains
+- `./protein2ipr.py ../hmm/hmmsearch/combined/ ../databases/filtered.tsv.gz ../hmm/pfam/protein2ipr_clustal.tsv`
 - `python pfam_hmm_merge.py`
 
