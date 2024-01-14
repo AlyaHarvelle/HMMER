@@ -74,7 +74,7 @@ We run the scripts one by one in the directory `root/scripts`.
 - `bash df_filter.sh ../databases/curated_disprot.csv ../databases/uniprot_filtered`
 - `python split_csv.py ../databases/uniprot_filtered/ ../databases/uniprot_filtered/parts/`
 - `sbatch start_array_jobs_msa.sh ../databases/uniprot_filtered/parts ../msa/unali_seq/`
-- `python clustalo_generator.py ../msa/unali_seq ../msa/clustal_msa`
+- `sbatch start_array_jobs_clustal.sh ../msa/unali_seq ../msa/clustal_msa`
 - `python cut_msa.py`
 - `python hmmbuild.py`
 - `sbatch start_array_jobs_hmm.sh clustal`
