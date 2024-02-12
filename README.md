@@ -4,7 +4,6 @@ Author: Skrylnik Alina.
 
 This repository contains the following files: 
 
-- `msa_analysis.ipynb`: analysis of the multiple sequence alignments.
 - `hmm_analysis.ipynb`: analysis of the generated Hidden Markov Models.
 - `functions.py`: contains the functions used in the previously listed notebooks.
 
