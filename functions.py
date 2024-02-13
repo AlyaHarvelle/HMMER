@@ -19,43 +19,41 @@ from Bio.Align import MultipleSeqAlignment
 from Bio.SeqRecord import SeqRecord
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import figure
+from matplotlib_venn import venn2, venn3, venn3_circles
+from upsetplot import UpSet, plot, from_memberships
 import seaborn as sns
 import subprocess
 
 directory = os.getcwd()
 
-# Set input parameters
-name = 'alina'
-server = 'ecate'
-
 # Create a directory if it doesn't exist yet
 def create_directory(directory_path):
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
-        print('Directory {} created.'.format(directory_path))
+        print("Directory {} created.".format(directory_path))
     else:
-        print('Directory {} already exists.'.format(directory_path))
+        print("Directory {} already exists.".format(directory_path))
 
 # Parses the json file and returns a pandas dataframe
 def json_parser(line):
     rows = list()
     for key, value in line.items():
-        if key == 'acc':
+        if key == "acc":
             acc = value
         else:
             evidence, feature, source = key.split('-')
             for k, v in value.items():
-                if k == 'regions':
+                if k == "regions":
                     for item in range(len(v)):
                         reg = v[item]
                         start, end = reg[0], reg[1]
                         rows.append({
-                            'acc': acc,
-                            'evidence': evidence,
-                            'feature': feature,
-                            'source': source,
-                            'start': start,
-                            'end': end
+                            "acc": acc,
+                            "evidence": evidence,
+                            "feature": feature,
+                            "source": source,
+                            "start": start,
+                            "end": end
                         })
 
     return rows
@@ -82,8 +80,8 @@ def blast_parser(input_file):
 
                 # Iterate pairwise alignments
                 for hsp in alignment.hsps:
-                    data.append((query_id.split('|')[1].split(' ')[0],
-                                 subject_id.split('|')[1].split(' ')[0],
+                    data.append((query_id.split("|")[1].split(" ")[0],
+                                 subject_id.split("|")[1].split(" ")[0],
                                  query_length,
                                  hsp.align_length,
                                  hsp.query,
@@ -99,14 +97,14 @@ def blast_parser(input_file):
                     # Skip duplicated subjects
                     break
 
-        df = pd.DataFrame(data, columns=['query_id', 'subject_id', 'query_len', 'hsp_len', 
-                                         'query_seq','subject_seq', 'query_start', 'query_end',
-                                         'subject_start', 'subject_end',
-                                         'eval', 'bit_score'])
+        df = pd.DataFrame(data, columns=["query_id", "subject_id", "query_len", "hsp_len", 
+                                         "query_seq","subject_seq", "query_start", "query_end",
+                                         "subject_start", "subject_end",
+                                         "eval", "bit_score"])
         
-        df = df.sort_values('eval', ascending=True)
-        grouped = df.groupby('query_id')['subject_id'].nunique().reset_index(name='count')
-        df = pd.merge(df, grouped, on='query_id')
+        df = df.sort_values("eval", ascending=True)
+        grouped = df.groupby("query_id")["subject_id"].nunique().reset_index(name="count")
+        df = pd.merge(df, grouped, on="query_id")
 
         return df
 
@@ -115,13 +113,13 @@ def blast_parser(input_file):
 def stats_calculation(seqs, q_id):
     
     data = []
-    aa = 'ACDEFGHIKLMNPQRSTVWY'
+    aa = "ACDEFGHIKLMNPQRSTVWY"
 
     for i, column in enumerate(seqs.T):
 
         count = Counter(column)
         try:
-            count.pop('-')
+            count.pop("-")
         except KeyError:
             pass
         count_sorted = sorted(count.items(), key=lambda x:x[1], reverse=True)
@@ -134,7 +132,7 @@ def stats_calculation(seqs, q_id):
         entropy = scipy.stats.entropy(probabilities, base=20)
         data.append([i, q_id, occupancy, entropy, count_sorted])
 
-    df_calc = pd.DataFrame(data, columns=['pos', 'query_id', 'occupancy', 'entropy', 'counts'])
+    df_calc = pd.DataFrame(data, columns=["pos", "query_id", "occupancy", "entropy", "counts"])
     return df_calc
 
 # Calculate statistics of the MSAs
@@ -566,13 +564,13 @@ def plot_overlaps(hmm_results, curated_query, id_dis):
     
 # Calculate the overlaps percentage
 def calculate_overlap(row_pfam, row_disprot):
-    start_pfam = row_pfam['start_pfam']
-    end_pfam = row_pfam['end_pfam']
-    start_hmm = row_pfam['ali_from']
-    end_hmm = row_pfam['ali_to']
-    start_disprot = row_disprot['start'] 
-    end_disprot = row_disprot['end']
-    disprot_length = end_disprot - start_disprot + 1
+    start_pfam = row_pfam['start_pfam'] # Pfam-HMM start
+    end_pfam = row_pfam['end_pfam'] # Pfam-HMM end
+    start_hmm = row_pfam['ali_from'] # DisProt-HMM start
+    end_hmm = row_pfam['ali_to'] # DisProt-HMM end
+    start_disprot = row_disprot['start'] # Curated DisProt start
+    end_disprot = row_disprot['end'] # Curated DisProt end
+    disprot_length = end_disprot - start_disprot + 1 # the length of the disordered region in the Curated DisProt database
 
     overlap_pfam_disprot = min(end_pfam, end_disprot) - max(start_pfam, start_disprot) + 1
     overlap_hmm_disprot = min(end_hmm, end_disprot) - max(start_hmm, start_disprot) + 1
@@ -589,11 +587,9 @@ def calculate_overlap(row_pfam, row_disprot):
 
     return percentage_overlap_pfam, percentage_overlap_hmm, overlap_pfam_disprot, overlap_hmm_disprot
 
-# Function to calculate overlaps between DisProt-HMM and Pfam-HMM
+# Calculate overlaps between DisProt-HMM and Pfam-HMM
 def pfam_hmm_overlap(row_pfam):
-    # Calculate the overlap of hmm (ali in this case) and the Pfam
-    overlap_len = min(row_pfam['end_pfam'], row_pfam['ali_to']) - max(row_pfam['start_pfam'], 
-                                                                      row_pfam['ali_from']) + 1 
+    overlap_len = min(row_pfam['end_pfam'], row_pfam['ali_to']) - max(row_pfam['start_pfam'], row_pfam['ali_from']) + 1 
     overlap_pfam = overlap_len / row_pfam['length_pfam'] * 100 # % of length overlap with Pfam
     overlap_ali = overlap_len / row_pfam['ali_length'] * 100 # % of length overlap with HMM (ali)
     total_length = row_pfam['length_pfam'] + row_pfam['ali_length'] - overlap_len # the whole region covered by hmm and pfam
@@ -610,3 +606,32 @@ def pfam_hmm_overlap(row_pfam):
         overlap_sym = 0
 
     return overlap_len, overlap_pfam, overlap_ali, non_overlap_len, overlap_perc, overlap_sym
+
+# Plot scatter plot and histogram together
+def scatter_hist(x, y, ax, ax_histx, ax_histy):
+    # no labels
+    ax_histx.tick_params(axis="x", labelbottom=False)
+    ax_histy.tick_params(axis="y", labelleft=False)
+
+    # the scatter plot:
+    ax.scatter(x, y)
+
+    # now determine nice limits by hand:
+    binwidth = 0.25
+    xymax = max(np.max(np.abs(x)), np.max(np.abs(y)))
+    lim = (int(xymax/binwidth) + 1) * binwidth
+
+    bins = np.arange(-lim, lim + binwidth, binwidth)
+    ax_histx.hist(x, bins=bins)
+    ax_histy.hist(y, bins=bins, orientation="horizontal")
+    
+# Calculate the overlap type between DisProt-HMM and Pfam-HMM    
+def categorize_overlap(percentage):
+    if percentage >= 75:
+        return "full"
+    elif 25 <= percentage < 75:
+        return "partial"
+    elif 0 <= percentage < 25:
+        return "no"
+    else:
+        return "unknown"
